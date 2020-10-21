@@ -128,7 +128,10 @@ func isCCHash(s string) bool {
 	if len(s) < 3 { //"cc#" is minimum
 		return false
 	}
-
+	if s[:2] != "cc" {
+		return false
+	}
+	return true
 }
 
 // Returns

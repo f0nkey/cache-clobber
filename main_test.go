@@ -191,3 +191,34 @@ func TestSrcFilePath(t *testing.T) {
 		}
 	}
 }
+
+func TestIsCCHash(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{name: "1", args: args{"cc234"}, want: true},
+		{name: "2", args: args{"cc346363633535353"}, want: true},
+		{name: "3", args: args{"cc3brtbrtyetwtwerwerwetyuiuii"}, want: true},
+		{name: "4", args: args{"cckwrwrwrwr"}, want: true},
+		{name: "5", args: args{"cc62626252525890862345678"}, want: true},
+		{name: "6", args: args{"cc1"}, want: true},
+		{name: "7", args: args{"cc0"}, want: true},
+		{name: "8", args: args{"cc9"}, want: true},
+		{name: "9", args: args{"cc"}, want: false},
+		{name: "10", args: args{"-blublubblub"}, want: false},
+		{name: "11", args: args{"ccblubblub"}, want: true},
+		{name: "12", args: args{"--cc74747"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isCCHash(tt.args.s); got != tt.want {
+				t.Errorf("isCCHash() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
