@@ -55,13 +55,11 @@ func htmlFilePaths() ([]string, error) {
 	return htmlFilePaths,  nil
 }
 
-// appended to as changes/errors are made
-var fileChanges string = "FILE CHANGES"
-var fileChangeErrors string = "FILE CHANGE ERRORS"
-
 // Edit the .html, files at src attributes, and files at href attributes by appending crc-32 hashes.
 func editFileLinkSrc(filePath, fileContent string) {
-	fileChanges = fileChanges + fmt.Sprintf("\nChanges for %s:", filePath)
+	fileChanges := fmt.Sprintf("\nChanges for %s:", filePath)
+	fileChangeErrors := fmt.Sprintf("\nErrors for %s:", filePath)
+	dir, _ := filepath.Split(filePath)
 	operateOnScannedTags(fileContent, func(tagType, wholeTag string, startTag int) {
 		if tagType == "script" {
 			src, err := srcFilePath(wholeTag)
@@ -92,6 +90,10 @@ func editFileLinkSrc(filePath, fileContent string) {
 			//}
 		}
 	})
+	fmt.Println(fileChanges)
+	if fileChangeErrors != fmt.Sprintf("\nErrors for %s:", filePath){
+		fmt.Println(fileChangeErrors)
+	}
 }
 
 // Renames file at filePath with a cache clobber certified hash.
