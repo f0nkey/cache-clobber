@@ -7,12 +7,13 @@ import (
 	"testing"
 )
 
+// todo: actually write test
 func TestAppendHashes(t *testing.T) {
 	defer func() {
-		//err := os.RemoveAll("./test")
-		//if err != nil {
-		//	t.Fatal(err)
-		//}
+		err := os.RemoveAll("./test")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}()
 	createTestDirFiles(t)
 	appendHashes()
@@ -70,6 +71,7 @@ func createTestDirFiles(t *testing.T) {
 			<title>Title</title>
 			<link rel="stylesheet" href="styles.css">
 			<link rel="stylesheet" href="more-styles.css">
+			<script src="cool.js"></script>
 			<script src="cool.js"></script>
 			<script src="./cooler.js"></script>
 		
