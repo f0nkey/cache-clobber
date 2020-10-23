@@ -13,21 +13,21 @@ import (
 	"strings"
 )
 
+var chgAttempts = changeAttempts{
+	changes: make(map[string]string),
+	errors:  make(map[string]string),
+}
+
 func main() {
-	chgAttempts = changeAttempts{
-		changes: make(map[string]string),
-		errors:   make(map[string]string),
-	}
+
 	appendHashes()
 	chgAttempts.printChangesErrors()
 }
 
 type changeAttempts struct {
 	changes map[string]string // [fileName.html]changeAttempts
-	errors map[string]string // [fileName.html]changeAttempts
+	errors  map[string]string // [fileName.html]changeAttempts
 }
-
-var chgAttempts changeAttempts
 
 func (c *changeAttempts) addChange(htmlFile, nameFrom, nameTo string) {
 	if _, exists := c.changes[htmlFile]; !exists {
@@ -56,7 +56,6 @@ func (c *changeAttempts) printChangesErrors() {
 		fmt.Println(thisErrs)
 	}
 }
-
 
 func appendHashes() {
 	htmlFilePaths, err := htmlFilePaths()
@@ -94,7 +93,7 @@ func htmlFilePaths() ([]string, error) {
 	if err != nil {
 		return nil, nil
 	}
-	return htmlFilePaths,  nil
+	return htmlFilePaths, nil
 }
 
 var editJobs []*job
@@ -110,7 +109,7 @@ type job struct {
 
 type renameJob struct {
 	pathFrom string
-	pathTo string
+	pathTo   string
 	htmlFile string
 }
 
@@ -138,7 +137,7 @@ func renameAll(jobs []*job) {
 
 	// batch html edits
 	for _, job := range jobs {
-		fileContent,err := ioutil.ReadFile(job.htmlFile)
+		fileContent, err := ioutil.ReadFile(job.htmlFile)
 		if err != nil {
 			chgAttempts.addError(job.htmlFile, err.Error())
 		}
@@ -164,7 +163,7 @@ func editFileLinkSrc(htmlFilePath, fileContent string) {
 	operateOnScannedTags(fileContent, func(tagType, wholeTag string, startTag int) {
 		if tagType == "script" {
 			src, err := srcFilePath(wholeTag)
-			if err != nil && err.Error() == "src is empty"{
+			if err != nil && err.Error() == "src is empty" {
 				return // normal for script tags to not have srcs
 			}
 			if err != nil {
@@ -216,18 +215,18 @@ func getHashedFileName(filePath string) (string, error) {
 	ccHash := "cc" + fmt.Sprint(hash(string(b))) // cc for CACHE CLOBBER
 	_, fileName := filepath.Split(filePath)
 
-	splitAtDash := strings.Split(fileName,"-")
+	splitAtDash := strings.Split(fileName, "-")
 	hashAndExt := splitAtDash[len(splitAtDash)-1]
-	splitAtDot := strings.Split(hashAndExt,".")
+	splitAtDot := strings.Split(hashAndExt, ".")
 	possibleHash := splitAtDot[len(splitAtDot)-2]
 
 	if isCCHash(possibleHash) {
-		newFileName := strings.Replace(fileName,possibleHash,ccHash,1)
+		newFileName := strings.Replace(fileName, possibleHash, ccHash, 1)
 		return newFileName, nil
 	}
 
 	ext := filepath.Ext(filePath)
-	newFileName := fileName[:len(fileName)-len(ext)] + "-"+ccHash + ext
+	newFileName := fileName[:len(fileName)-len(ext)] + "-" + ccHash + ext
 	return newFileName, nil
 }
 
@@ -243,7 +242,7 @@ func isCCHash(s string) bool {
 
 func hash(s string) uint32 {
 	hasher := crc32.New(crc32.IEEETable)
-	_, err := io.WriteString(hasher,s)
+	_, err := io.WriteString(hasher, s)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -264,7 +263,7 @@ func operateOnScannedTags(fileContent string, op func(tagType, wholeTag string, 
 			continue
 		}
 		if char == '>' {
-			wholeTag := fileContent[startTag:i+1]
+			wholeTag := fileContent[startTag : i+1]
 			op(currTagType, wholeTag, startTag)
 			currTagType = ""
 			readTagType = false
@@ -273,7 +272,7 @@ func operateOnScannedTags(fileContent string, op func(tagType, wholeTag string, 
 		}
 		if insideTag {
 			if char == ' ' && !readTagType {
-				currTagType = fileContent[startTag+1:i] // startTag+1 cuts off the <
+				currTagType = fileContent[startTag+1 : i] // startTag+1 cuts off the <
 				readTagType = true
 			}
 			if !readTagType {
@@ -297,7 +296,7 @@ func hrefFilePath(wholeTag string) (string, error) {
 	if !strings.Contains(filePath, ".css") {
 		return "", errors.New("href is not css file")
 	}
-	return filePath[6:len(filePath)-1], nil // cuts off src=" and "
+	return filePath[6 : len(filePath)-1], nil // cuts off src=" and "
 }
 
 func srcFilePath(wholeTag string) (string, error) {
@@ -314,5 +313,5 @@ func srcFilePath(wholeTag string) (string, error) {
 	if !strings.Contains(filePath, ".js") {
 		return "", errors.New("src is not js file")
 	}
-	return filePath[5:len(filePath)-1], nil // cuts off src=" and "
+	return filePath[5 : len(filePath)-1], nil // cuts off src=" and "
 }

@@ -305,7 +305,7 @@ func TestHrefFilePath(t *testing.T) {
 
 	errorTests := []struct {
 		in       string // input
-		expected error // expected result
+		expected error  // expected result
 	}{
 		{`<script src=""></script>`, errors.New("src is empty")},
 		{`<script src="  "></script>`, errors.New("src is not js file")},
@@ -320,7 +320,6 @@ func TestHrefFilePath(t *testing.T) {
 		}
 	}
 }
-
 
 func TestSrcFilePath(t *testing.T) {
 	nonErrorTests := []struct {
@@ -345,7 +344,7 @@ func TestSrcFilePath(t *testing.T) {
 
 	errorTests := []struct {
 		in       string // input
-		expected error // expected result
+		expected error  // expected result
 	}{
 		{`<link href=""></link>`, errors.New("href is empty")},
 		{`<link href="  "></link>`, errors.New("href is not css file")},
@@ -358,7 +357,7 @@ func TestSrcFilePath(t *testing.T) {
 		if err != nil && err.Error() != tt.expected.Error() {
 			t.Errorf("hrefFilePath(%s): expected err %s, actual err %s", tt.in, tt.expected, err)
 		}
-		if err == nil  {
+		if err == nil {
 			t.Errorf("hrefFilePath(%s): expected err %s, actual err %s", tt.in, tt.expected, err)
 		}
 	}
