@@ -110,13 +110,18 @@ func renameAll(jobs []*job) {
 		if err != nil {
 			fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.filePathWantToRename, err.Error()))
 		}
-		newFileContent := strings.ReplaceAll(string(fileContent),job.tagPath+job.fileNameWantToRename,job.tagPath+job.renameTo)
+
+		newFileContent := strings.ReplaceAll(string(fileContent), job.wholeTag, newTag(job))
 		err = ioutil.WriteFile(job.htmlFile, []byte(newFileContent), 0644)
 		if err != nil {
 			fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.filePathWantToRename, err.Error()))
 		}
 	}
+}
 
+func newTag(j *job) string {
+	newTag := strings.ReplaceAll(j.wholeTag, j.tagPath+j.fileNameWantToRename, j.tagPath+j.renameTo)
+	return strings.ReplaceAll(j.wholeTag, j.wholeTag, newTag)
 }
 
 // Edit the .html, files at src attributes, and files at href attributes by appending crc-32 hashes.
