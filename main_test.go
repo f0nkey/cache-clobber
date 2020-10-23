@@ -4,19 +4,99 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
 // todo: actually write test
 func TestAppendHashes(t *testing.T) {
 	defer func() {
-		err := os.RemoveAll("./test")
-		if err != nil {
-			t.Fatal(err)
-		}
+		//err := os.RemoveAll("./test")
+		//if err != nil {
+		//	t.Fatal(err)
+		//}
 	}()
 	createTestDirFiles(t)
+
+	var filePaths = []string{"test/lame.js", "test/cooler.js", "test/cool.js", "test/assets/big.js", "test/assets/bloat.js"}
+	numFilesToRename := len(filePaths)
+
 	appendHashes()
+
+	// Check if file got renamed
+	filesInPaths := []string{}
+	err := filepath.Walk("./test",
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			filesInPaths = append(filesInPaths, path)
+			return nil
+		})
+	if err != nil {
+		t.Error(err)
+	}
+
+	newNames := make(map[string]bool) // [fileName]existsInHTML, existsInHTML checked down below
+	newNames["yeet-cc123.js"] = false //
+	numFilesRenamed := 0
+	for _, f := range filesInPaths {
+		for _, ff := range filePaths {
+			if removeCCHash(f) == ff {
+				_, name := filepath.Split(f)
+				newNames[name] = false
+				numFilesRenamed++
+			}
+		}
+	}
+	if numFilesRenamed != numFilesToRename {
+		t.Error("Did not rename all the js files referenced in the htmls")
+	}
+
+	// Check if HTML was edited with renamed files
+	htmlFileContents := []string{}
+	for _, f := range filesInPaths {
+		if filepath.Ext(f) == ".html" {
+			cont, err := ioutil.ReadFile(f)
+			if err != nil {
+				t.Error(err)
+			}
+			htmlFileContents = append(htmlFileContents, string(cont))
+		}
+	}
+	for _, fc := range htmlFileContents {
+		for newName, _ := range newNames {
+			if strings.Contains(fc, newName) {
+				newNames[newName] = true
+			}
+		}
+	}
+
+	for newName, foundInHTML := range newNames {
+		if !foundInHTML && newName != "yeet-cc123.js" {
+			t.Error(newName, "was not found in HTML")
+		}
+	}
+}
+
+func TestRemoveCCHash(t *testing.T) {
+	in := "file-cc234234234.js"
+	expected := "file.js"
+	if actual := removeCCHash(in); actual != expected {
+		t.Errorf("expected %s, actual %s", expected, actual)
+	}
+
+	in = "file-cc0.js"
+	expected = "file.js"
+	if actual := removeCCHash(in); actual != expected {
+		t.Errorf("expected %s, actual %s", expected, actual)
+	}
+}
+
+func removeCCHash(s string) (string) {
+	split := strings.Split(s, "-cc")
+	return split[0] + filepath.Ext(s)
 }
 
 func createTestDirFiles(t *testing.T) {
