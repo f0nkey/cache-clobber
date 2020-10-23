@@ -1,5 +1,7 @@
 # cache-clobber
 
+![Gopher busting a cache](https://i.imgur.com/xFKKhVj.png)
+
 Renames your js/css files based on their contents with a hash at the end. 
 Ensures your html matches the new names.
 
