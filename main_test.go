@@ -19,7 +19,17 @@ func TestAppendHashes(t *testing.T) {
 	}()
 	createTestDirFiles(t)
 
-	var filePaths = []string{"test/lame.js", "test/cooler.js", "test/cool.js", "test/assets/big.js", "test/assets/bloat.js"}
+	var filePaths = []string{
+		"test/lame.js",
+		"test/cooler.js",
+		"test/cool.js",
+		"test/assets/big.js",
+		"test/assets/bloat.js",
+		"test/styles.css",
+		"test/more-styles.css",
+		"test/assets/pretty-styles.css",
+		"test/assets/ugly-styles.css",
+	}
 	numFilesToRename := len(filePaths)
 
 	appendHashes()
@@ -125,6 +135,10 @@ func createTestDirFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	err = ioutil.WriteFile("./test/more-styles.css", []byte(`body{background-color:red;}`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = ioutil.WriteFile("./test/assets/pretty-styles.css", []byte(`h2{font-size:20px;}`), 0644)
 	if err != nil {
@@ -180,6 +194,8 @@ func createTestDirFiles(t *testing.T) {
 			<script src="../lame.js"></script>
 			<script src="../cooler.js"></script>
 			<script src="../cool.js"></script>
+			<link rel="stylesheet" href="./pretty-styles.css">
+			<link rel="stylesheet" href="../assets/ugly-styles.css">
 		</head>
 		<body>
 			<h1>Fear</h1>

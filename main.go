@@ -140,28 +140,36 @@ func editFileLinkSrc(filePath, fileContent string) {
 				//fileChangeErrors = fileChangeErrors + fmt.Sprintf("\nERROR for tag: %s, %s", wholeTag, err.Error())
 			}
 
-			hashedFileName, err := getHashedFileName(dir+src) // change to rename file
-			if err != nil {
-				fmt.Println(err)
-				//fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.wholeTag, err.Error()))
-			}
-
-			_, originalName := filepath.Split(dir+src)
-			tagLocalPath,_ := filepath.Split(src)
-			editJobs = append(editJobs, &job{
-				fileNameWantToRename: originalName,
-				filePathWantToRename: dir+src,
-				renameTo:             hashedFileName,
-				tagPath:              tagLocalPath,
-				htmlFile:             filePath,
-				wholeTag:             wholeTag,
-			})
+			addJob(dir, src, filePath, wholeTag)
 		}
 		if tagType == "link" {
-			// todo: make work with link tags
+			href, err := hrefFilePath(wholeTag)
+			if err != nil {
+				fmt.Println(err)
+			}
+			addJob(dir, href, filePath, wholeTag)
 		}
 	})
 
+}
+
+func addJob(dir string, srcHref string, filePath string, wholeTag string) {
+	hashedFileName, err := getHashedFileName(dir + srcHref) // change to rename file
+	if err != nil {
+		fmt.Println(err)
+		//fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.wholeTag, err.Error()))
+	}
+
+	_, originalName := filepath.Split(dir + srcHref)
+	tagLocalPath, _ := filepath.Split(srcHref)
+	editJobs = append(editJobs, &job{
+		fileNameWantToRename: originalName,
+		filePathWantToRename: dir + srcHref,
+		renameTo:             hashedFileName,
+		tagPath:              tagLocalPath,
+		htmlFile:             filePath,
+		wholeTag:             wholeTag,
+	})
 }
 
 // Renames file at filePath with a cache clobber certified hash.
@@ -181,7 +189,7 @@ func getHashedFileName(filePath string) (string, error) {
 	possibleHash := splitAtDot[len(splitAtDot)-2]
 
 	if isCCHash(possibleHash) {
-		//todo: delete the hash, place hash in between the name and .js/.css
+		//todo: delete the hash, place hash in between the name and .js/.css and add tests for already hashed items
 		newFileName := strings.Replace(fileName,possibleHash,"-"+ccHash,1)
 		err = os.Rename(dir + fileName, dir + newFileName)
 		if err != nil {
