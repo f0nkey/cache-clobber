@@ -14,8 +14,49 @@ import (
 )
 
 func main() {
+	chgAttempts = changeAttempts{
+		changes: make(map[string]string),
+		errors:   make(map[string]string),
+	}
 	appendHashes()
+	chgAttempts.printChangesErrors()
 }
+
+type changeAttempts struct {
+	changes map[string]string // [fileName.html]changeAttempts
+	errors map[string]string // [fileName.html]changeAttempts
+}
+
+var chgAttempts changeAttempts
+
+func (c *changeAttempts) addChange(htmlFile, nameFrom, nameTo string) {
+	if _, exists := c.changes[htmlFile]; !exists {
+		c.changes[htmlFile] = "Changes for " + htmlFile + ":"
+	}
+	c.changes[htmlFile] = c.changes[htmlFile] + fmt.Sprintf("\n%s => %s", nameFrom, nameTo)
+}
+
+func (c *changeAttempts) addError(htmlFile, err string) {
+	if _, exists := c.errors[htmlFile]; !exists {
+		c.errors[htmlFile] = "Errors for " + htmlFile + ":"
+	}
+	c.errors[htmlFile] = c.errors[htmlFile] + fmt.Sprintf("\nERROR:%s", err)
+}
+
+func (c *changeAttempts) printChangesErrors() {
+	for htmlChg, changes := range c.changes {
+		thisErrs := ""
+		// grab the errors associated with the curr htmlChg
+		for htmlErr, errs := range c.errors {
+			if htmlChg == htmlErr {
+				thisErrs = errs
+			}
+		}
+		fmt.Println(changes)
+		fmt.Println(thisErrs)
+	}
+}
+
 
 func appendHashes() {
 	htmlFilePaths, err := htmlFilePaths()
@@ -56,15 +97,6 @@ func htmlFilePaths() ([]string, error) {
 	return htmlFilePaths,  nil
 }
 
-// todo: finish changes
-var fileChanges = make(changes)
-// [fileName.html]changes
-type changes map[string]string
-
-func (c changes) addChange(htmlFile, change string){
-
-}
-
 var editJobs []*job
 
 type job struct {
@@ -79,6 +111,7 @@ type job struct {
 type renameJob struct {
 	pathFrom string
 	pathTo string
+	htmlFile string
 }
 
 func renameAll(jobs []*job) {
@@ -92,15 +125,14 @@ func renameAll(jobs []*job) {
 		renameJobs[renameJob{
 			pathFrom: job.filePathWantToRename,
 			pathTo:   dir + job.renameTo,
+			htmlFile: job.htmlFile,
 		}] = struct{}{}
 	} // only want to rename a file once, else we may attempt to rename an already renamed file, and it won't exist
 
 	for job, _ := range renameJobs {
 		err := os.Rename(job.pathFrom, job.pathTo)
 		if err != nil {
-			fmt.Println(err)
-			//return "", err
-			// stop any that reference the file at the specific point
+			chgAttempts.addError(job.htmlFile, err.Error())
 		}
 	}
 
@@ -108,14 +140,16 @@ func renameAll(jobs []*job) {
 	for _, job := range jobs {
 		fileContent,err := ioutil.ReadFile(job.htmlFile)
 		if err != nil {
-			fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.filePathWantToRename, err.Error()))
+			chgAttempts.addError(job.htmlFile, err.Error())
 		}
 
 		newFileContent := strings.ReplaceAll(string(fileContent), job.wholeTag, newTag(job))
 		err = ioutil.WriteFile(job.htmlFile, []byte(newFileContent), 0644)
 		if err != nil {
-			fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.filePathWantToRename, err.Error()))
+			chgAttempts.addError(job.htmlFile, err.Error())
+			continue
 		}
+		chgAttempts.addChange(job.htmlFile, job.filePathWantToRename, job.renameTo)
 	}
 }
 
@@ -125,10 +159,8 @@ func newTag(j *job) string {
 }
 
 // Edit the .html, files at src attributes, and files at href attributes by appending crc-32 hashes.
-func editFileLinkSrc(filePath, fileContent string) {
-	//fileChanges := fmt.Sprintf("\nChanges for %s:", filePath)
-	//fileChangeErrors := fmt.Sprintf("\nErrors for %s:", filePath)
-	dir, _ := filepath.Split(filePath)
+func editFileLinkSrc(htmlFilePath, fileContent string) {
+	dir, _ := filepath.Split(htmlFilePath)
 	operateOnScannedTags(fileContent, func(tagType, wholeTag string, startTag int) {
 		if tagType == "script" {
 			src, err := srcFilePath(wholeTag)
@@ -136,28 +168,29 @@ func editFileLinkSrc(filePath, fileContent string) {
 				return // normal for script tags to not have srcs
 			}
 			if err != nil {
-				fmt.Println(err)
-				//fileChangeErrors = fileChangeErrors + fmt.Sprintf("\nERROR for tag: %s, %s", wholeTag, err.Error())
+				chgAttempts.addError(htmlFilePath, err.Error())
+				return
 			}
 
-			addJob(dir, src, filePath, wholeTag)
+			addJob(dir, src, htmlFilePath, wholeTag)
 		}
 		if tagType == "link" {
 			href, err := hrefFilePath(wholeTag)
 			if err != nil {
-				fmt.Println(err)
+				chgAttempts.addError(htmlFilePath, err.Error())
+				return
 			}
-			addJob(dir, href, filePath, wholeTag)
+			addJob(dir, href, htmlFilePath, wholeTag)
 		}
 	})
 
 }
 
-func addJob(dir string, srcHref string, filePath string, wholeTag string) {
+func addJob(dir string, srcHref string, htmlFilePath string, wholeTag string) {
 	hashedFileName, err := getHashedFileName(dir + srcHref) // change to rename file
 	if err != nil {
-		fmt.Println(err)
-		//fileChanges.addChange(job.htmlFile,fmt.Sprintf("\nERROR for tag: %s, %s", job.wholeTag, err.Error()))
+		chgAttempts.addError(htmlFilePath, err.Error())
+		return
 	}
 
 	_, originalName := filepath.Split(dir + srcHref)
@@ -167,7 +200,7 @@ func addJob(dir string, srcHref string, filePath string, wholeTag string) {
 		filePathWantToRename: dir + srcHref,
 		renameTo:             hashedFileName,
 		tagPath:              tagLocalPath,
-		htmlFile:             filePath,
+		htmlFile:             htmlFilePath,
 		wholeTag:             wholeTag,
 	})
 }
@@ -181,7 +214,7 @@ func getHashedFileName(filePath string) (string, error) {
 		return "", err
 	}
 	ccHash := "cc" + fmt.Sprint(hash(string(b))) // cc for CACHE CLOBBER
-	dir, fileName := filepath.Split(filePath)
+	_, fileName := filepath.Split(filePath)
 
 	splitAtDash := strings.Split(fileName,"-")
 	hashAndExt := splitAtDash[len(splitAtDash)-1]
@@ -189,16 +222,10 @@ func getHashedFileName(filePath string) (string, error) {
 	possibleHash := splitAtDot[len(splitAtDot)-2]
 
 	if isCCHash(possibleHash) {
-		//todo: delete the hash, place hash in between the name and .js/.css and add tests for already hashed items
-		newFileName := strings.Replace(fileName,possibleHash,"-"+ccHash,1)
-		err = os.Rename(dir + fileName, dir + newFileName)
-		if err != nil {
-			return "", err
-		}
+		newFileName := strings.Replace(fileName,possibleHash,ccHash,1)
 		return newFileName, nil
 	}
 
-	//todo: place hash in between the name and .js/.css
 	ext := filepath.Ext(filePath)
 	newFileName := fileName[:len(fileName)-len(ext)] + "-"+ccHash + ext
 	return newFileName, nil
@@ -271,7 +298,6 @@ func hrefFilePath(wholeTag string) (string, error) {
 		return "", errors.New("href is not css file")
 	}
 	return filePath[6:len(filePath)-1], nil // cuts off src=" and "
-
 }
 
 func srcFilePath(wholeTag string) (string, error) {

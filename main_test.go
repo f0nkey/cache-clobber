@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// todo: actually write test
 func TestAppendHashes(t *testing.T) {
 	defer func() {
 		//err := os.RemoveAll("./test")
@@ -23,6 +22,9 @@ func TestAppendHashes(t *testing.T) {
 		"test/lame.js",
 		"test/cooler.js",
 		"test/cool.js",
+		"test/already-hashed-cc123.js",
+		"test/weird-ccna-name.js",
+		"test/weird-ccna-name-already-hashed-cc123.js",
 		"test/assets/big.js",
 		"test/assets/bloat.js",
 		"test/styles.css",
@@ -30,11 +32,19 @@ func TestAppendHashes(t *testing.T) {
 		"test/assets/pretty-styles.css",
 		"test/assets/ugly-styles.css",
 	}
-	numFilesToRename := len(filePaths)
+
+	// Using fileContents to see if all renamed files were the original ones, checked in checkNeccesaryFilesChanges
+	var fileContents = make(map[string]struct{})
+	for _, fp := range filePaths {
+		b, err := ioutil.ReadFile(fp)
+		if err != nil {
+			t.Error(err)
+		}
+		fileContents[string(b)] = struct{}{}
+	}
 
 	appendHashes()
 
-	// Check if file got renamed
 	filesInPaths := []string{}
 	err := filepath.Walk("./test",
 		func(path string, info os.FileInfo, err error) error {
@@ -48,23 +58,47 @@ func TestAppendHashes(t *testing.T) {
 		t.Error(err)
 	}
 
-	newNames := make(map[string]bool) // [fileName]existsInHTML, existsInHTML checked down below
-	newNames["yeet-cc123.js"] = false //
-	numFilesRenamed := 0
+	newNames := make(map[string]bool) // [fileName]existsInHTML, existsInHTML checked in checkHTMLEdits
+	newNamesPaths := []string{}
 	for _, f := range filesInPaths {
 		for _, ff := range filePaths {
-			if removeCCHash(f) == ff {
+			a := filepath.Clean(removeCCHash(f))
+			b := filepath.Clean(removeCCHash(ff))
+			if a == b {
+				newNamesPaths = append(newNamesPaths, f)
 				_, name := filepath.Split(f)
 				newNames[name] = false
-				numFilesRenamed++
 			}
 		}
 	}
-	if numFilesRenamed != numFilesToRename {
-		t.Error("Did not rename all the js files referenced in the htmls")
+
+	checkNeccesaryFilesChanges(t, newNamesPaths, fileContents)
+
+	// Check if HTML was edited with renamed (newNames) files
+	checkHTMLEdits(t, filesInPaths, newNames)
+}
+
+func checkNeccesaryFilesChanges(t *testing.T, newNamesPaths []string, fileContents map[string]struct{}) {
+	var newNamesFileContents = make(map[string]struct{})
+	for _, f := range newNamesPaths {
+		b, err := ioutil.ReadFile(f)
+		if err != nil {
+			t.Error(err)
+		}
+		newNamesFileContents[string(b)] = struct{}{}
 	}
 
-	// Check if HTML was edited with renamed files
+	for nfc, _ := range newNamesFileContents {
+		cont, exists := fileContents[nfc]
+		if exists {
+			delete(fileContents, nfc)
+			continue
+		}
+		t.Error("Did not find new file with matching content", cont)
+	}
+}
+
+func checkHTMLEdits(t *testing.T, filesInPaths []string, newNames map[string]bool) {
 	htmlFileContents := []string{}
 	for _, f := range filesInPaths {
 		if filepath.Ext(f) == ".html" {
@@ -75,6 +109,7 @@ func TestAppendHashes(t *testing.T) {
 			htmlFileContents = append(htmlFileContents, string(cont))
 		}
 	}
+
 	for _, fc := range htmlFileContents {
 		for newName, _ := range newNames {
 			if strings.Contains(fc, newName) {
@@ -84,7 +119,7 @@ func TestAppendHashes(t *testing.T) {
 	}
 
 	for newName, foundInHTML := range newNames {
-		if !foundInHTML && newName != "yeet-cc123.js" {
+		if !foundInHTML {
 			t.Error(newName, "was not found in HTML")
 		}
 	}
@@ -102,11 +137,32 @@ func TestRemoveCCHash(t *testing.T) {
 	if actual := removeCCHash(in); actual != expected {
 		t.Errorf("expected %s, actual %s", expected, actual)
 	}
+
+	in = "file-ccna-cc123.js"
+	expected = "file-ccna.js"
+	if actual := removeCCHash(in); actual != expected {
+		t.Errorf("expected %s, actual %s", expected, actual)
+	}
+
+	in = "file-ccna-cc0.js"
+	expected = "file-ccna.js"
+	if actual := removeCCHash(in); actual != expected {
+		t.Errorf("expected %s, actual %s", expected, actual)
+	}
+
+	in = "file.js"
+	expected = "file.js"
+	if actual := removeCCHash(in); actual != expected {
+		t.Errorf("expected %s, actual %s", expected, actual)
+	}
 }
 
-func removeCCHash(s string) (string) {
-	split := strings.Split(s, "-cc")
-	return split[0] + filepath.Ext(s)
+func removeCCHash(s string) string {
+	i := strings.LastIndex(s, "-cc")
+	if i == -1 {
+		return s
+	}
+	return s[:i] + filepath.Ext(s)
 }
 
 func createTestDirFiles(t *testing.T) {
@@ -115,6 +171,21 @@ func createTestDirFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = os.MkdirAll("./test/assets", 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = ioutil.WriteFile("./test/already-hashed-cc123.js", []byte(`console.log("cool and AMAZING")`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = ioutil.WriteFile("./test/weird-ccna-name.js", []byte(`console.log("cool and FANTASTIC")`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = ioutil.WriteFile("./test/weird-ccna-name-already-hashed-cc123.js", []byte(`console.log("cool and alright alright alright")`), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +239,11 @@ func createTestDirFiles(t *testing.T) {
 			<script src="cool.js"></script>
 			<script src="cool.js"></script>
 			<script src="./cooler.js"></script>
-		
-		
+			<script src="already-hashed-cc123.js"></script>
+
+			<script src="./weird-ccna-name.js"></script>
+			<script src="./weird-ccna-name-already-hashed-cc123.js"></script>
+
 			<script src="assets/bloat.js"></script>
 			<script src="./assets/big.js"></script>
 			<link rel="stylesheet" href="assets/pretty-styles.css">
