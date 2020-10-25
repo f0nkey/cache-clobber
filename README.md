@@ -7,7 +7,7 @@ Ensures your html matches the new names.
 
 `<script src="bloat.js">` => `<script src="bloat-cc2530066345.js">`
 
-Does a recursive search in `.html` files for references in `src` and `href` attributes. 
+Does a recursive search for `.html` files for references in `src` and `href` attributes. 
 
 ## Why?
 
