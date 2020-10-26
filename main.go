@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -19,14 +20,23 @@ var chgAttempts = changeAttempts{
 }
 
 func main() {
+	baseDir := flag.String("dir", "./", "specifies the directory to scan recursively in for html files")
 
-	appendHashes()
+	flag.Parse()
+
+	AppendHashes(*baseDir)
 	chgAttempts.printChangesErrors()
 }
 
 type changeAttempts struct {
 	changes map[string]string // [fileName.html]changeAttempts
 	errors  map[string]string // [fileName.html]changeAttempts
+}
+
+type Change struct {
+	fileNameFrom string
+	fileNameTo   string
+	htmlFile     string
 }
 
 func (c *changeAttempts) addChange(htmlFile, nameFrom, nameTo string) {
@@ -57,25 +67,28 @@ func (c *changeAttempts) printChangesErrors() {
 	}
 }
 
-func appendHashes() {
-	htmlFilePaths, err := htmlFilePaths()
+func AppendHashes(baseDir string) []Change {
+	htmlFilePaths, err := htmlFilePaths(baseDir)
 	if err != nil {
 		log.Fatal(err)
+		return []Change{}
 	}
 
+	var editJobs = []*job{}
 	for _, filePath := range htmlFilePaths {
 		b, err := ioutil.ReadFile(filePath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		editFileLinkSrc(filePath, string(b))
+		addEditJobs(&editJobs, filePath, string(b))
 	}
-	renameAll(editJobs)
+	changes := renameAll(editJobs)
+	return changes
 }
 
-func htmlFilePaths() ([]string, error) {
+func htmlFilePaths(baseDir string) ([]string, error) {
 	var htmlFilePaths []string
-	err := filepath.Walk(".",
+	err := filepath.Walk(baseDir,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -96,8 +109,6 @@ func htmlFilePaths() ([]string, error) {
 	return htmlFilePaths, nil
 }
 
-var editJobs []*job
-
 type job struct {
 	fileNameWantToRename string
 	filePathWantToRename string
@@ -113,7 +124,7 @@ type renameJob struct {
 	htmlFile string
 }
 
-func renameAll(jobs []*job) {
+func renameAll(jobs []*job) []Change {
 	for _, job := range jobs {
 		job.filePathWantToRename = filepath.Clean(job.filePathWantToRename)
 	}
@@ -136,6 +147,7 @@ func renameAll(jobs []*job) {
 	}
 
 	// batch html edits
+	var changes []Change
 	for _, job := range jobs {
 		fileContent, err := ioutil.ReadFile(job.htmlFile)
 		if err != nil {
@@ -148,8 +160,14 @@ func renameAll(jobs []*job) {
 			chgAttempts.addError(job.htmlFile, err.Error())
 			continue
 		}
+		changes = append(changes, Change{
+			fileNameFrom: job.filePathWantToRename,
+			fileNameTo:   job.renameTo,
+			htmlFile:     job.htmlFile,
+		})
 		chgAttempts.addChange(job.htmlFile, job.filePathWantToRename, job.renameTo)
 	}
+	return changes
 }
 
 func newTag(j *job) string {
@@ -157,12 +175,18 @@ func newTag(j *job) string {
 	return strings.ReplaceAll(j.wholeTag, j.wholeTag, newTag)
 }
 
-// Edit the .html, files at src attributes, and files at href attributes by appending crc-32 hashes.
-func editFileLinkSrc(htmlFilePath, fileContent string) {
+type tagInfo struct {
+	tagType  string
+	wholeTag string
+	startTag int
+}
+
+func addEditJobs(jobs *[]*job, htmlFilePath, fileContent string) {
 	dir, _ := filepath.Split(htmlFilePath)
-	operateOnScannedTags(fileContent, func(tagType, wholeTag string, startTag int) {
-		if tagType == "script" {
-			src, err := srcFilePath(wholeTag)
+	tags := tagsFromHTML(fileContent)
+	for _, ti := range tags {
+		if ti.tagType == "script" {
+			src, err := srcFilePath(ti.wholeTag)
 			if err != nil && err.Error() == "src is empty" {
 				return // normal for script tags to not have srcs
 			}
@@ -171,21 +195,20 @@ func editFileLinkSrc(htmlFilePath, fileContent string) {
 				return
 			}
 
-			addJob(dir, src, htmlFilePath, wholeTag)
+			addJob(jobs, dir, src, htmlFilePath, ti.wholeTag)
 		}
-		if tagType == "link" {
-			href, err := hrefFilePath(wholeTag)
+		if ti.tagType == "link" {
+			href, err := hrefFilePath(ti.wholeTag)
 			if err != nil {
 				chgAttempts.addError(htmlFilePath, err.Error())
 				return
 			}
-			addJob(dir, href, htmlFilePath, wholeTag)
+			addJob(jobs, dir, href, htmlFilePath, ti.wholeTag)
 		}
-	})
-
+	}
 }
 
-func addJob(dir string, srcHref string, htmlFilePath string, wholeTag string) {
+func addJob(jobs *[]*job, dir string, srcHref string, htmlFilePath string, wholeTag string) {
 	hashedFileName, err := getHashedFileName(dir + srcHref) // change to rename file
 	if err != nil {
 		chgAttempts.addError(htmlFilePath, err.Error())
@@ -194,7 +217,7 @@ func addJob(dir string, srcHref string, htmlFilePath string, wholeTag string) {
 
 	_, originalName := filepath.Split(dir + srcHref)
 	tagLocalPath, _ := filepath.Split(srcHref)
-	editJobs = append(editJobs, &job{
+	*jobs = append(*jobs, &job{
 		fileNameWantToRename: originalName,
 		filePathWantToRename: dir + srcHref,
 		renameTo:             hashedFileName,
@@ -250,7 +273,8 @@ func hash(s string) uint32 {
 }
 
 // Runs func op for each tag found in fileContent.
-func operateOnScannedTags(fileContent string, op func(tagType, wholeTag string, startTag int)) {
+func tagsFromHTML(fileContent string) []tagInfo {
+	tags := make([]tagInfo, 0, 0)
 	insideTag := false
 	readTagType := false // read = past tense
 
@@ -264,7 +288,11 @@ func operateOnScannedTags(fileContent string, op func(tagType, wholeTag string, 
 		}
 		if char == '>' {
 			wholeTag := fileContent[startTag : i+1]
-			op(currTagType, wholeTag, startTag)
+			tags = append(tags, tagInfo{
+				tagType:  currTagType,
+				wholeTag: wholeTag,
+				startTag: startTag,
+			})
 			currTagType = ""
 			readTagType = false
 			insideTag = false
@@ -280,6 +308,7 @@ func operateOnScannedTags(fileContent string, op func(tagType, wholeTag string, 
 			}
 		}
 	}
+	return tags
 }
 
 func hrefFilePath(wholeTag string) (string, error) {

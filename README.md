@@ -7,6 +7,15 @@ Ensures your html matches the new names.
 
 Does a recursive search in `.html` files for references in `src` and `href` attributes. 
 
+## Usage
+
+Binary usage:
+```
+Usage of cache-clobber:
+  -dir string
+        specifies the directory to scan recursively in for html files (default ".")
+```
+
 ## Why?
 
 Your browser will download your js/css files once and store them into a cache based on their file name. Next visit, it will not download the file names it has cached and use its local copies instead. 

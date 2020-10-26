@@ -5,20 +5,18 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestAppendHashes(t *testing.T) {
 	defer func() {
-		//err := os.RemoveAll("./test")
-		//if err != nil {
-		//	t.Fatal(err)
-		//}
+		//cleanTestDirectory(t)
 	}()
+	cleanTestDirectory(t)
 	createTestDirFiles(t)
 
-	var filePaths = []string{
+	// all files that can be changed, kept for ease of use
+	var allFiles = []string{
 		"test/lame.js",
 		"test/cooler.js",
 		"test/cool.js",
@@ -33,136 +31,126 @@ func TestAppendHashes(t *testing.T) {
 		"test/assets/ugly-styles.css",
 	}
 
-	// Using fileContents to see if all renamed files were the original ones, checked in checkNeccesaryFilesChanges
-	var fileContents = make(map[string]struct{})
-	for _, fp := range filePaths {
-		b, err := ioutil.ReadFile(fp)
-		if err != nil {
-			t.Error(err)
+	cleanTestDirectory(t)
+	createTestDirFiles(t)
+	baseDir := "./test"
+	{
+		expectedChangedFiles := allFiles
+		changes := AppendHashes(baseDir)
+		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		for _, changeNotDone := range leftoverExpected {
+			t.Error("expected file to change, but it did not:", changeNotDone)
 		}
-		fileContents[string(b)] = struct{}{}
+		for _, changeDone := range leftoverChanges {
+			t.Error("did not specify file to change, but it did:", changeDone)
+		}
 	}
 
-	appendHashes()
+	cleanTestDirectory(t)
+	createTestDirFiles(t)
+	baseDir = "./"
+	{
+		expectedChangedFiles := allFiles
+		changes := AppendHashes(baseDir)
+		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		for _, changeNotDone := range leftoverExpected {
+			t.Error("expected file to change, but it did not:", changeNotDone)
+		}
+		for _, changeDone := range leftoverChanges {
+			t.Error("did not specify file to change, but it did:", changeDone)
+		}
+	}
 
-	filesInPaths := []string{}
-	err := filepath.Walk("./test",
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
+	cleanTestDirectory(t)
+	createTestDirFiles(t)
+	baseDir = "./test/assets"
+	{
+		expectedChangedFiles := []string{
+			"lame.js",
+			"cooler.js",
+			"cool.js",
+			"pretty-styles.css",
+			"ugly-styles.css",
+		}
+		changes := AppendHashes(baseDir)
+		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		for _, changeNotDone := range leftoverExpected {
+			t.Error("expected file to change, but it did not:", changeNotDone)
+		}
+		for _, changeDone := range leftoverChanges {
+			t.Error("did not specify file to change, but it did:", changeDone)
+		}
+	}
+}
+
+func deleteMatches(a []Change, b []string) ([]string, []string) {
+	bMap := make(map[string]struct{})
+	for _, v := range b {
+		bMap[v] = struct{}{}
+	}
+	bMapCopy := make(map[string]struct{})
+	for k, v := range bMap {
+		bMapCopy[k] = v
+	}
+
+	aMap := make(map[Change]struct{})
+	for _, v := range a {
+		aMap[v] = struct{}{}
+	}
+	aMapCopy := make(map[Change]struct{})
+	for k, v := range aMap {
+		aMapCopy[k] = v
+	}
+
+	// reduce aMap
+	for chg, _ := range aMap {
+		for b := range bMapCopy {
+			_, chgFName := filepath.Split(chg.fileNameFrom)
+			_, bFName := filepath.Split(b)
+			if chgFName == bFName {
+				delete(aMap, chg)
+				delete(bMap, b)
 			}
-			filesInPaths = append(filesInPaths, path)
-			return nil
-		})
+		}
+	}
+
+	// reduce bMap
+	for chg, _ := range aMapCopy {
+		for b := range bMap {
+			_, chgFName := filepath.Split(chg.fileNameFrom)
+			_, bFName := filepath.Split(b)
+			if chgFName == bFName {
+				delete(aMap, chg)
+				delete(bMap, b)
+			}
+		}
+	}
+
+	shouldHaveChanged := []string{}
+	for v, _ := range bMap {
+		shouldHaveChanged = append(shouldHaveChanged, v)
+	}
+
+	changedButWasNotToldToChange := []string{}
+	for v, _ := range aMap {
+		changedButWasNotToldToChange = append(changedButWasNotToldToChange, v.fileNameFrom)
+	}
+	return changedButWasNotToldToChange, shouldHaveChanged
+}
+
+func removeChange(slice []Change, s int) []Change {
+	return append(slice[:s], slice[s+1:]...)
+}
+
+func removeString(slice []string, s int) []string {
+	return append(slice[:s], slice[s+1:]...)
+}
+
+func cleanTestDirectory(t *testing.T) {
+	err := os.RemoveAll("./test")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-
-	newNames := make(map[string]bool) // [fileName]existsInHTML, existsInHTML checked in checkHTMLEdits
-	newNamesPaths := []string{}
-	for _, f := range filesInPaths {
-		for _, ff := range filePaths {
-			a := filepath.Clean(removeCCHash(f))
-			b := filepath.Clean(removeCCHash(ff))
-			if a == b {
-				newNamesPaths = append(newNamesPaths, f)
-				_, name := filepath.Split(f)
-				newNames[name] = false
-			}
-		}
-	}
-
-	checkNeccesaryFilesChanges(t, newNamesPaths, fileContents)
-
-	// Check if HTML was edited with renamed (newNames) files
-	checkHTMLEdits(t, filesInPaths, newNames)
-}
-
-func checkNeccesaryFilesChanges(t *testing.T, newNamesPaths []string, fileContents map[string]struct{}) {
-	var newNamesFileContents = make(map[string]struct{})
-	for _, f := range newNamesPaths {
-		b, err := ioutil.ReadFile(f)
-		if err != nil {
-			t.Error(err)
-		}
-		newNamesFileContents[string(b)] = struct{}{}
-	}
-
-	for nfc, _ := range newNamesFileContents {
-		cont, exists := fileContents[nfc]
-		if exists {
-			delete(fileContents, nfc)
-			continue
-		}
-		t.Error("Did not find new file with matching content", cont)
-	}
-}
-
-func checkHTMLEdits(t *testing.T, filesInPaths []string, newNames map[string]bool) {
-	htmlFileContents := []string{}
-	for _, f := range filesInPaths {
-		if filepath.Ext(f) == ".html" {
-			cont, err := ioutil.ReadFile(f)
-			if err != nil {
-				t.Error(err)
-			}
-			htmlFileContents = append(htmlFileContents, string(cont))
-		}
-	}
-
-	for _, fc := range htmlFileContents {
-		for newName, _ := range newNames {
-			if strings.Contains(fc, newName) {
-				newNames[newName] = true
-			}
-		}
-	}
-
-	for newName, foundInHTML := range newNames {
-		if !foundInHTML {
-			t.Error(newName, "was not found in HTML")
-		}
-	}
-}
-
-func TestRemoveCCHash(t *testing.T) {
-	in := "file-cc234234234.js"
-	expected := "file.js"
-	if actual := removeCCHash(in); actual != expected {
-		t.Errorf("expected %s, actual %s", expected, actual)
-	}
-
-	in = "file-cc0.js"
-	expected = "file.js"
-	if actual := removeCCHash(in); actual != expected {
-		t.Errorf("expected %s, actual %s", expected, actual)
-	}
-
-	in = "file-ccna-cc123.js"
-	expected = "file-ccna.js"
-	if actual := removeCCHash(in); actual != expected {
-		t.Errorf("expected %s, actual %s", expected, actual)
-	}
-
-	in = "file-ccna-cc0.js"
-	expected = "file-ccna.js"
-	if actual := removeCCHash(in); actual != expected {
-		t.Errorf("expected %s, actual %s", expected, actual)
-	}
-
-	in = "file.js"
-	expected = "file.js"
-	if actual := removeCCHash(in); actual != expected {
-		t.Errorf("expected %s, actual %s", expected, actual)
-	}
-}
-
-func removeCCHash(s string) string {
-	i := strings.LastIndex(s, "-cc")
-	if i == -1 {
-		return s
-	}
-	return s[:i] + filepath.Ext(s)
 }
 
 func createTestDirFiles(t *testing.T) {
