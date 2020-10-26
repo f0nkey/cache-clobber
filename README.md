@@ -1,11 +1,13 @@
 # cache-clobber
 
+![Gopher busting a cache](https://i.imgur.com/xFKKhVj.png)
+
 Renames your js/css files based on their contents with a hash at the end. 
 Ensures your html matches the new names.
 
 `<script src="bloat.js">` => `<script src="bloat-cc2530066345.js">`
 
-Does a recursive search in `.html` files for references in `src` and `href` attributes. 
+Does a recursive search for `.html` files for references in `src` and `href` attributes. 
 
 ## Usage
 
