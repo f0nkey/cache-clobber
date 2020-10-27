@@ -14,64 +14,93 @@ import (
 	"strings"
 )
 
-var chgAttempts = changeAttempts{
-	changes: make(map[string]string),
-	errors:  make(map[string]string),
-}
-
 func main() {
 	baseDir := flag.String("dir", "./", "specifies the directory to scan recursively in for html files")
 
 	flag.Parse()
 
-	AppendHashes(*baseDir)
-	chgAttempts.printChangesErrors()
+	changes := appendHashes(*baseDir)
+	changes.printChangesErrors()
 }
 
-type changeAttempts struct {
-	changes map[string]string // [fileName.html]changeAttempts
-	errors  map[string]string // [fileName.html]changeAttempts
+type changes struct {
+	edits map[string][]edit // [htmlFile]edits
+	errors map[string][]editError
 }
 
-type Change struct {
+type edit struct {
 	fileNameFrom string
 	fileNameTo   string
 	htmlFile     string
 }
 
-func (c *changeAttempts) addChange(htmlFile, nameFrom, nameTo string) {
-	if _, exists := c.changes[htmlFile]; !exists {
-		c.changes[htmlFile] = "Changes for " + htmlFile + ":"
-	}
-	c.changes[htmlFile] = c.changes[htmlFile] + fmt.Sprintf("\n%s => %s", nameFrom, nameTo)
+type editError struct {
+	err error
+	htmlFile string
 }
 
-func (c *changeAttempts) addError(htmlFile, err string) {
+func (c *changes) addEdit(htmlFile, nameFrom, nameTo string) {
+	if _, exists := c.edits[htmlFile]; !exists {
+		c.edits[htmlFile] = make([]edit,0,1)
+	}
+	arr := c.edits[htmlFile]
+	arr = append(arr, edit{
+		fileNameFrom: nameFrom,
+		fileNameTo:   nameTo,
+		htmlFile:     htmlFile,
+	})
+	c.edits[htmlFile] = arr
+}
+
+func (c *changes) addError(htmlFile string, err error) {
 	if _, exists := c.errors[htmlFile]; !exists {
-		c.errors[htmlFile] = "Errors for " + htmlFile + ":"
+		c.errors[htmlFile] = make([]editError,0,1)
 	}
-	c.errors[htmlFile] = c.errors[htmlFile] + fmt.Sprintf("\nERROR:%s", err)
+	arr := c.errors[htmlFile]
+	arr = append(arr, editError{
+		err: err,
+		htmlFile:     htmlFile,
+	})
+	c.errors[htmlFile] = arr
 }
 
-func (c *changeAttempts) printChangesErrors() {
-	for htmlChg, changes := range c.changes {
-		thisErrs := ""
-		// grab the errors associated with the curr htmlChg
-		for htmlErr, errs := range c.errors {
-			if htmlChg == htmlErr {
-				thisErrs = errs
-			}
+func (c *changes) printChangesErrors() {
+	if len(c.edits) == 0 {
+		fmt.Println("No changes.")
+	}
+	for html, arr := range c.edits {
+		if len(arr) == 0 {
+			fmt.Println()
+			continue
 		}
-		fmt.Println(changes)
-		fmt.Println(thisErrs)
+		for _, edit := range arr {
+			_, fFrom := filepath.Split(edit.fileNameFrom)
+			_, fTo := filepath.Split(edit.fileNameTo)
+			fmt.Printf("\n[%s] %s => %s", html, fFrom, fTo)
+		}
+	}
+
+	for html, arr := range c.errors {
+		if len(arr) == 0 {
+			fmt.Println()
+			continue
+		}
+		for _, edit := range arr {
+			fmt.Printf("\n[%s] ERROR: %s", html, edit.err.Error())
+		}
 	}
 }
 
-func AppendHashes(baseDir string) []Change {
+func appendHashes(baseDir string) *changes {
+	changes := &changes{
+		edits:  make(map[string][]edit),
+		errors: make(map[string][]editError),
+	}
+
 	htmlFilePaths, err := htmlFilePaths(baseDir)
 	if err != nil {
-		log.Fatal(err)
-		return []Change{}
+		changes.addError("", err)
+		return changes
 	}
 
 	var editJobs = []*job{}
@@ -80,9 +109,9 @@ func AppendHashes(baseDir string) []Change {
 		if err != nil {
 			log.Fatal(err)
 		}
-		addEditJobs(&editJobs, filePath, string(b))
+		addEditJobs(changes, &editJobs, filePath, string(b))
 	}
-	changes := renameAll(editJobs)
+	renameAll(changes, editJobs)
 	return changes
 }
 
@@ -124,50 +153,43 @@ type renameJob struct {
 	htmlFile string
 }
 
-func renameAll(jobs []*job) []Change {
+func renameAll(changes *changes, jobs []*job) {
 	for _, job := range jobs {
 		job.filePathWantToRename = filepath.Clean(job.filePathWantToRename)
 	}
 
-	renameJobs := make(map[renameJob]struct{})
+	renameJobs := make(map[string]renameJob)
 	for _, job := range jobs {
 		dir, _ := filepath.Split(job.filePathWantToRename)
-		renameJobs[renameJob{
+		renameJobs[job.filePathWantToRename] = renameJob{
 			pathFrom: job.filePathWantToRename,
 			pathTo:   dir + job.renameTo,
 			htmlFile: job.htmlFile,
-		}] = struct{}{}
+		}
 	} // only want to rename a file once, else we may attempt to rename an already renamed file, and it won't exist
 
-	for job, _ := range renameJobs {
+	for _, job := range renameJobs {
 		err := os.Rename(job.pathFrom, job.pathTo)
 		if err != nil {
-			chgAttempts.addError(job.htmlFile, err.Error())
+			changes.addError(job.htmlFile, err)
 		}
 	}
 
 	// batch html edits
-	var changes []Change
 	for _, job := range jobs {
 		fileContent, err := ioutil.ReadFile(job.htmlFile)
 		if err != nil {
-			chgAttempts.addError(job.htmlFile, err.Error())
+			changes.addError(job.htmlFile, err)
 		}
 
 		newFileContent := strings.ReplaceAll(string(fileContent), job.wholeTag, newTag(job))
 		err = ioutil.WriteFile(job.htmlFile, []byte(newFileContent), 0644)
 		if err != nil {
-			chgAttempts.addError(job.htmlFile, err.Error())
+			changes.addError(job.htmlFile, err)
 			continue
 		}
-		changes = append(changes, Change{
-			fileNameFrom: job.filePathWantToRename,
-			fileNameTo:   job.renameTo,
-			htmlFile:     job.htmlFile,
-		})
-		chgAttempts.addChange(job.htmlFile, job.filePathWantToRename, job.renameTo)
+		changes.addEdit(job.htmlFile, job.filePathWantToRename, job.renameTo)
 	}
-	return changes
 }
 
 func newTag(j *job) string {
@@ -181,37 +203,36 @@ type tagInfo struct {
 	startTag int
 }
 
-func addEditJobs(jobs *[]*job, htmlFilePath, fileContent string) {
+func addEditJobs(editsErrors *changes, jobs *[]*job, htmlFilePath, fileContent string) {
 	dir, _ := filepath.Split(htmlFilePath)
 	tags := tagsFromHTML(fileContent)
 	for _, ti := range tags {
 		if ti.tagType == "script" {
 			src, err := srcFilePath(ti.wholeTag)
 			if err != nil && err.Error() == "src is empty" {
-				return // normal for script tags to not have srcs
+				continue // normal for script tags to not have srcs
 			}
 			if err != nil {
-				chgAttempts.addError(htmlFilePath, err.Error())
-				return
+				editsErrors.addError(htmlFilePath, err)
+				continue
 			}
-
-			addJob(jobs, dir, src, htmlFilePath, ti.wholeTag)
+			addJob(editsErrors, jobs, dir, src, htmlFilePath, ti.wholeTag)
 		}
 		if ti.tagType == "link" {
 			href, err := hrefFilePath(ti.wholeTag)
 			if err != nil {
-				chgAttempts.addError(htmlFilePath, err.Error())
-				return
+				editsErrors.addError(htmlFilePath, err)
+				continue
 			}
-			addJob(jobs, dir, href, htmlFilePath, ti.wholeTag)
+			addJob(editsErrors, jobs, dir, href, htmlFilePath, ti.wholeTag)
 		}
 	}
 }
 
-func addJob(jobs *[]*job, dir string, srcHref string, htmlFilePath string, wholeTag string) {
+func addJob(changes *changes, jobs *[]*job, dir string, srcHref string, htmlFilePath string, wholeTag string) {
 	hashedFileName, err := getHashedFileName(dir + srcHref) // change to rename file
 	if err != nil {
-		chgAttempts.addError(htmlFilePath, err.Error())
+		changes.addError(htmlFilePath, err)
 		return
 	}
 
@@ -231,7 +252,8 @@ func addJob(jobs *[]*job, dir string, srcHref string, htmlFilePath string, whole
 // Returns a newly renamed filepath.
 // Will remove the previous cc hash if it exists.
 func getHashedFileName(filePath string) (string, error) {
-	b, err := ioutil.ReadFile(filePath)
+	clean := filepath.Clean(filePath)
+	b, err := ioutil.ReadFile(clean)
 	if err != nil {
 		return "", err
 	}

@@ -13,7 +13,7 @@ func TestAppendHashes(t *testing.T) {
 		//cleanTestDirectory(t)
 	}()
 	cleanTestDirectory(t)
-	createTestDirFiles(t)
+	createTestDirFiles(t) // todo: add script tags wiht srcs, and ones that lead to http endpoints
 
 	// all files that can be changed, kept for ease of use
 	var allFiles = []string{
@@ -36,13 +36,20 @@ func TestAppendHashes(t *testing.T) {
 	baseDir := "./test"
 	{
 		expectedChangedFiles := allFiles
-		changes := AppendHashes(baseDir)
-		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		changes := appendHashes(baseDir)
+		leftoverChanges, leftoverExpected := deleteMatches(allChangesToOneSlice(changes), expectedChangedFiles)
 		for _, changeNotDone := range leftoverExpected {
 			t.Error("expected file to change, but it did not:", changeNotDone)
 		}
 		for _, changeDone := range leftoverChanges {
 			t.Error("did not specify file to change, but it did:", changeDone)
+		}
+		if len(changes.errors) != 0 {
+			for _, v := range changes.errors {
+				for _, vv := range v {
+					t.Error("encountered error", vv.err)
+				}
+			}
 		}
 	}
 
@@ -51,13 +58,20 @@ func TestAppendHashes(t *testing.T) {
 	baseDir = "./"
 	{
 		expectedChangedFiles := allFiles
-		changes := AppendHashes(baseDir)
-		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		changes := appendHashes(baseDir)
+		leftoverChanges, leftoverExpected := deleteMatches(allChangesToOneSlice(changes), expectedChangedFiles)
 		for _, changeNotDone := range leftoverExpected {
 			t.Error("expected file to change, but it did not:", changeNotDone)
 		}
 		for _, changeDone := range leftoverChanges {
 			t.Error("did not specify file to change, but it did:", changeDone)
+		}
+		if len(changes.errors) != 0 {
+			for _, v := range changes.errors {
+				for _, vv := range v {
+					t.Error("encountered error", vv.err)
+				}
+			}
 		}
 	}
 
@@ -72,18 +86,36 @@ func TestAppendHashes(t *testing.T) {
 			"pretty-styles.css",
 			"ugly-styles.css",
 		}
-		changes := AppendHashes(baseDir)
-		leftoverChanges, leftoverExpected := deleteMatches(changes, expectedChangedFiles)
+		changes := appendHashes(baseDir)
+
+		leftoverChanges, leftoverExpected := deleteMatches(allChangesToOneSlice(changes), expectedChangedFiles)
 		for _, changeNotDone := range leftoverExpected {
 			t.Error("expected file to change, but it did not:", changeNotDone)
 		}
 		for _, changeDone := range leftoverChanges {
 			t.Error("did not specify file to change, but it did:", changeDone)
 		}
+		if len(changes.errors) != 0 {
+			for _, v := range changes.errors {
+				for _, vv := range v {
+					t.Error("encountered error", vv.err)
+				}
+			}
+		}
 	}
 }
 
-func deleteMatches(a []Change, b []string) ([]string, []string) {
+func allChangesToOneSlice(changes *changes) []edit {
+	edits := []edit{}
+	for _, html := range changes.edits {
+		for _, g := range html {
+			edits = append(edits, g)
+		}
+	}
+	return edits
+}
+
+func deleteMatches(a []edit, b []string) ([]string, []string) {
 	bMap := make(map[string]struct{})
 	for _, v := range b {
 		bMap[v] = struct{}{}
@@ -93,11 +125,11 @@ func deleteMatches(a []Change, b []string) ([]string, []string) {
 		bMapCopy[k] = v
 	}
 
-	aMap := make(map[Change]struct{})
+	aMap := make(map[edit]struct{})
 	for _, v := range a {
 		aMap[v] = struct{}{}
 	}
-	aMapCopy := make(map[Change]struct{})
+	aMapCopy := make(map[edit]struct{})
 	for k, v := range aMap {
 		aMapCopy[k] = v
 	}
@@ -136,14 +168,6 @@ func deleteMatches(a []Change, b []string) ([]string, []string) {
 		changedButWasNotToldToChange = append(changedButWasNotToldToChange, v.fileNameFrom)
 	}
 	return changedButWasNotToldToChange, shouldHaveChanged
-}
-
-func removeChange(slice []Change, s int) []Change {
-	return append(slice[:s], slice[s+1:]...)
-}
-
-func removeString(slice []string, s int) []string {
-	return append(slice[:s], slice[s+1:]...)
 }
 
 func cleanTestDirectory(t *testing.T) {
