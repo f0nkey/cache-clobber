@@ -258,6 +258,10 @@ func createTestDirFiles(t *testing.T) {
 			<script src="./weird-ccna-name.js"></script>
 			<script src="./weird-ccna-name-already-hashed-cc123.js"></script>
 
+			<link href="https://fonts.googleapis.com/css?family=Bowlby+One+SC|Cabin&display=swap" rel="stylesheet">
+			<link rel='icon' type='image/png' href='./favicon.png'>
+			<link rel='stylesheet' href='./global.css'>
+
 			<script src="assets/bloat.js"></script>
 			<script src="./assets/big.js"></script>
 			<link rel="stylesheet" href="assets/pretty-styles.css">
@@ -296,7 +300,7 @@ func createTestDirFiles(t *testing.T) {
 	}
 }
 
-func TestHrefFilePath(t *testing.T) {
+func TestSrcFilePath(t *testing.T) {
 	nonErrorTests := []struct {
 		in       string // input
 		expected string // expected result
@@ -335,7 +339,7 @@ func TestHrefFilePath(t *testing.T) {
 	}
 }
 
-func TestSrcFilePath(t *testing.T) {
+func TestHrefFilePath(t *testing.T) {
 	nonErrorTests := []struct {
 		in       string // input
 		expected string // expected result
@@ -364,6 +368,9 @@ func TestSrcFilePath(t *testing.T) {
 		{`<link href="  "></link>`, errors.New("href is not css file")},
 		{`<link href="../bad.php"></link>`, errors.New("href is not css file")},
 		{`<link href="./big.js"></link>`, errors.New("href is not css file")},
+		{`<link href="h" rel="stylesheet">`, errors.New("href is not css file")},
+		{`<link href="" rel="stylesheet">`, errors.New("href is empty")},
+		{`<link href="https://fonts.googleapis.com/css?family=Bowlby+One+SC|Cabin&display=swap" rel="stylesheet">`, errors.New("href is not css file")},
 	}
 
 	for _, tt := range errorTests {

@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 )
 
@@ -24,7 +23,7 @@ func main() {
 }
 
 type changes struct {
-	edits map[string][]edit // [htmlFile]edits
+	edits  map[string][]edit // [htmlFile]edits
 	errors map[string][]editError
 }
 
@@ -35,13 +34,13 @@ type edit struct {
 }
 
 type editError struct {
-	err error
+	err      error
 	htmlFile string
 }
 
 func (c *changes) addEdit(htmlFile, nameFrom, nameTo string) {
 	if _, exists := c.edits[htmlFile]; !exists {
-		c.edits[htmlFile] = make([]edit,0,1)
+		c.edits[htmlFile] = make([]edit, 0, 1)
 	}
 	arr := c.edits[htmlFile]
 	arr = append(arr, edit{
@@ -54,12 +53,12 @@ func (c *changes) addEdit(htmlFile, nameFrom, nameTo string) {
 
 func (c *changes) addError(htmlFile string, err error) {
 	if _, exists := c.errors[htmlFile]; !exists {
-		c.errors[htmlFile] = make([]editError,0,1)
+		c.errors[htmlFile] = make([]editError, 0, 1)
 	}
 	arr := c.errors[htmlFile]
 	arr = append(arr, editError{
-		err: err,
-		htmlFile:     htmlFile,
+		err:      err,
+		htmlFile: htmlFile,
 	})
 	c.errors[htmlFile] = arr
 }
@@ -224,7 +223,9 @@ func addEditJobs(editsErrors *changes, jobs *[]*job, htmlFilePath, fileContent s
 				continue
 			}
 			if err != nil {
-				editsErrors.addError(htmlFilePath, err)
+				if err.Error() != "href is empty" && err.Error() != "href is not css file" {
+					editsErrors.addError(htmlFilePath, err)
+				}
 				continue
 			}
 			addJob(editsErrors, jobs, dir, href, htmlFilePath, ti.wholeTag)
@@ -348,12 +349,16 @@ func tagsFromHTML(fileContent string) []tagInfo {
 }
 
 func hrefFilePath(wholeTag string) (string, error) {
-	r, err := regexp.Compile(`(href=".+")`)
-	if err != nil {
-		log.Fatal(err)
+	start := strings.Index(wholeTag, `href="`)
+	start += len(`href="`)
+	filePath := ""
+	for i := start; i < len(wholeTag); i++ {
+		if wholeTag[i] == '"' {
+			filePath = wholeTag[start:i]
+			break
+		}
 	}
 
-	filePath := string(r.Find([]byte(wholeTag)))
 	if filePath == "" {
 		return "", errors.New("href is empty")
 	}
@@ -361,16 +366,20 @@ func hrefFilePath(wholeTag string) (string, error) {
 	if !strings.Contains(filePath, ".css") {
 		return "", errors.New("href is not css file")
 	}
-	return filePath[6 : len(filePath)-1], nil // cuts off src=" and "
+	return filePath, nil // cuts off href=" and "
 }
 
 func srcFilePath(wholeTag string) (string, error) {
-	r, err := regexp.Compile(`(src=".+")`)
-	if err != nil {
-		log.Fatal(err)
+	start := strings.Index(wholeTag, `src="`)
+	start += len(`src="`)
+	filePath := ""
+	for i := start; i < len(wholeTag); i++ {
+		if wholeTag[i] == '"' {
+			filePath = wholeTag[start:i]
+			break
+		}
 	}
 
-	filePath := string(r.Find([]byte(wholeTag)))
 	if filePath == "" {
 		return "", errors.New("src is empty")
 	}
@@ -378,5 +387,5 @@ func srcFilePath(wholeTag string) (string, error) {
 	if !strings.Contains(filePath, ".js") {
 		return "", errors.New("src is not js file")
 	}
-	return filePath[5 : len(filePath)-1], nil // cuts off src=" and "
+	return filePath, nil // cuts off src=" and "
 }
