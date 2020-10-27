@@ -13,7 +13,7 @@ func TestAppendHashes(t *testing.T) {
 		//cleanTestDirectory(t)
 	}()
 	cleanTestDirectory(t)
-	createTestDirFiles(t) // todo: add script tags wiht srcs, and ones that lead to http endpoints
+	createTestDirFiles(t)
 
 	// all files that can be changed, kept for ease of use
 	var allFiles = []string{
@@ -250,6 +250,8 @@ func createTestDirFiles(t *testing.T) {
 			<link rel="stylesheet" href="more-styles.css">
 			<script src="cool.js"></script>
 			<script src="cool.js"></script>
+			<script> console.log("I belong to no one.") </script>
+			<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 			<script src="./cooler.js"></script>
 			<script src="already-hashed-cc123.js"></script>
 
@@ -401,6 +403,33 @@ func TestIsCCHash(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := isCCHash(tt.args.s); got != tt.want {
 				t.Errorf("isCCHash() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHttpPrefixed(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{name: "", args: args{"https://code.jquery.com/jquery-3.5.1.min.js"}, want: true},
+		{name: "", args: args{"http://lodash.com"}, want: true},
+		{name: "", args: args{"http"}, want: true},
+		{name: "", args: args{"ht"}, want: false},
+		{name: "", args: args{"h"}, want: false},
+		{name: "", args: args{""}, want: false},
+		{name: "", args: args{"yay.js"}, want: false},
+		{name: "", args: args{"./test/deep/down/file.js"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := httpPrefixed(tt.args.s); got != tt.want {
+				t.Errorf("httpPrefixed() = %v, want %v", got, tt.want)
 			}
 		})
 	}

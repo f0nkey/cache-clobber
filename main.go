@@ -209,7 +209,7 @@ func addEditJobs(editsErrors *changes, jobs *[]*job, htmlFilePath, fileContent s
 	for _, ti := range tags {
 		if ti.tagType == "script" {
 			src, err := srcFilePath(ti.wholeTag)
-			if err != nil && err.Error() == "src is empty" {
+			if err != nil && err.Error() == "src is empty" || httpPrefixed(src) {
 				continue // normal for script tags to not have srcs
 			}
 			if err != nil {
@@ -220,6 +220,9 @@ func addEditJobs(editsErrors *changes, jobs *[]*job, htmlFilePath, fileContent s
 		}
 		if ti.tagType == "link" {
 			href, err := hrefFilePath(ti.wholeTag)
+			if httpPrefixed(href) {
+				continue
+			}
 			if err != nil {
 				editsErrors.addError(htmlFilePath, err)
 				continue
@@ -227,6 +230,17 @@ func addEditJobs(editsErrors *changes, jobs *[]*job, htmlFilePath, fileContent s
 			addJob(editsErrors, jobs, dir, href, htmlFilePath, ti.wholeTag)
 		}
 	}
+}
+
+func httpPrefixed(s string) bool {
+	prefix := "http"
+	if len(s) < len(prefix) {
+		return false
+	}
+	if s[:4] == prefix {
+		return true
+	}
+	return false
 }
 
 func addJob(changes *changes, jobs *[]*job, dir string, srcHref string, htmlFilePath string, wholeTag string) {
