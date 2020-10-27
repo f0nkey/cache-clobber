@@ -29,6 +29,7 @@ func TestAppendHashes(t *testing.T) {
 		"test/more-styles.css",
 		"test/assets/pretty-styles.css",
 		"test/assets/ugly-styles.css",
+		"test/assets/single-quotes.js",
 	}
 
 	cleanTestDirectory(t)
@@ -239,6 +240,10 @@ func createTestDirFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	err = ioutil.WriteFile("./test/assets/single-quotes.js", []byte(`console.log('lyin\' is a sin')`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	err = ioutil.WriteFile("./test/index.html", []byte(`
 		<!DOCTYPE html>
@@ -250,6 +255,7 @@ func createTestDirFiles(t *testing.T) {
 			<link rel="stylesheet" href="more-styles.css">
 			<script src="cool.js"></script>
 			<script src="cool.js"></script>
+			<script src="./assets/single-quotes.js"></script>
 			<script> console.log("I belong to no one.") </script>
 			<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 			<script src="./cooler.js"></script>
@@ -260,7 +266,6 @@ func createTestDirFiles(t *testing.T) {
 
 			<link href="https://fonts.googleapis.com/css?family=Bowlby+One+SC|Cabin&display=swap" rel="stylesheet">
 			<link rel='icon' type='image/png' href='./favicon.png'>
-			<link rel='stylesheet' href='./global.css'>
 
 			<script src="assets/bloat.js"></script>
 			<script src="./assets/big.js"></script>
@@ -305,6 +310,7 @@ func TestSrcFilePath(t *testing.T) {
 		in       string // input
 		expected string // expected result
 	}{
+		{`<script src='./single.js'></script>`, `./single.js`},
 		{`<script src="lame.js"></script>`, `lame.js`},
 		{`<script src="../lame.js"></script>`, `../lame.js`},
 		{`<script type="text/javascript" src="../lame.js"></script>`, `../lame.js`},
@@ -344,6 +350,7 @@ func TestHrefFilePath(t *testing.T) {
 		in       string // input
 		expected string // expected result
 	}{
+		{`<link href='./single.css'></link>`, `./single.css`},
 		{`<link href="lame.css"></link>`, `lame.css`},
 		{`<link href="../lame.css"></link>`, `../lame.css`},
 		{`<link href="../lame.css"></link>`, `../lame.css`},

@@ -350,10 +350,15 @@ func tagsFromHTML(fileContent string) []tagInfo {
 
 func hrefFilePath(wholeTag string) (string, error) {
 	start := strings.Index(wholeTag, `href="`)
+	quoteType := '"'
+	if start == -1 {
+		start = strings.Index(wholeTag, `href='`)
+		quoteType = '\''
+	}
 	start += len(`href="`)
 	filePath := ""
 	for i := start; i < len(wholeTag); i++ {
-		if wholeTag[i] == '"' {
+		if rune(wholeTag[i]) == quoteType {
 			filePath = wholeTag[start:i]
 			break
 		}
@@ -371,10 +376,15 @@ func hrefFilePath(wholeTag string) (string, error) {
 
 func srcFilePath(wholeTag string) (string, error) {
 	start := strings.Index(wholeTag, `src="`)
+	quoteType := '"'
+	if start == -1 {
+		start = strings.Index(wholeTag, `src='`)
+		quoteType = '\''
+	}
 	start += len(`src="`)
 	filePath := ""
 	for i := start; i < len(wholeTag); i++ {
-		if wholeTag[i] == '"' {
+		if rune(wholeTag[i]) == quoteType {
 			filePath = wholeTag[start:i]
 			break
 		}
